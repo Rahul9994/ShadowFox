@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DistilBERT IMDb Trainer — Live Graph</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg1:#0f172a;
+      --bg2:#071033;
+      --card:#0b1220;
+      --accent:#6ee7b7;
+      --glass:rgba(255,255,255,0.03);
+      --mono:SFMono-Regular, menlo, monospace;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#e6eef8}
+    .container{max-width:1100px;margin:40px auto;padding:28px;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+    header{display:flex;align-items:center;gap:16px}
+    .logo{width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#60a5fa);display:flex;align-items:center;justify-content:center;font-weight:700;color:#04263b}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:4px 0 18px;color:rgba(230,238,248,0.8)}
+    
+    /* Layout Grid */
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:20px}
+    
+    .card{background:var(--card);padding:18px;border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+    
+    .controls{display:flex;gap:10px;flex-wrap:wrap}
+    button.btn{appearance:none;border:0;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer;transition:transform .15s ease,box-shadow .15s;display:inline-flex;align-items:center;gap:8px}
+    button.primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#04263b}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#cfe7ff}
+    button:active{transform:translateY(1px)}
+    .btn:hover{box-shadow:0 6px 20px rgba(10,20,40,0.5)}
+    
+    .progress{height:12px;background:rgba(255,255,255,0.04);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#60a5fa);border-radius:999px;transition:width 100ms linear}
+    
+    .console{height:200px;overflow:auto;background:linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.18));padding:12px;border-radius:8px;font-family:var(--mono);font-size:13px;color:#dbeafe}
+    
+    .code{background:rgba(2,6,23,0.6);padding:16px;border-radius:10px;overflow:auto;font-family:var(--mono);font-size:13px;color:#cfe7ff;line-height:1.45; height: 300px}
+    pre{margin:0;white-space:pre-wrap}
+    
+    .input-row{display:flex;gap:8px;margin-top:8px}
+    input[type=text]{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:inherit}
+    .small{font-size:12px;color:rgba(230,238,248,0.7)}
+    
+    .signature{margin-top:18px;text-align:center}
+    
+    /* Graph Container */
+    .chart-container {
+      position: relative; 
+      height: 200px; 
+      width: 100%; 
+      margin-top: 10px;
+    }
+
+    @media (max-width:980px){.grid{grid-template-columns:1fr;}.container{margin:18px;padding:16px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">DP</div>
+      <div>
+        <h1>DistilBERT Trainer + Live Graph</h1>
+        <p class="lead">Interactive simulation with real-time accuracy visualization.</p>
+      </div>
+    </header>
+    
+    <div class="grid" style="margin-top:18px">
+      <div>
+        <div class="card">
+          <div class="controls">
+            <button id="btnTokenize" class="btn ghost">Tokenize</button>
+            <button id="btnTrain" class="btn primary">Start Training</button>
+            <button id="btnEval" class="btn ghost">Evaluate</button>
+            <button id="btnSave" class="btn ghost">Save Model</button>
+          </div>
+          
+          <div style="margin-top:14px">
+            <div class="small">Training Progress</div>
+            <div class="progress" style="margin-top:8px"><i id="bar"></i></div>
+          </div>
+
+          <div style="margin-top:12px" class="small">Console Logs</div>
+          <div id="console" class="console" style="margin-top:8px"></div>
+
+          <div class="input-row">
+            <input id="txtExample" type="text" placeholder="Enter a sentence to predict sentiment">
+            <button id="btnPredict" class="btn primary">Predict</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-weight:700">Live Accuracy Tracking</div>
+            <div class="small" style="color:var(--accent)">Running...</div>
+          </div>
+          
+          <div class="chart-container">
+            <canvas id="accChart"></canvas>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <div style="flex:1;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;text-align:center">
+              <div style="font-weight:700; color: #60a5fa">Accuracy</div>
+              <div id="acc" style="font-size:18px">-</div>
+            </div>
+            <div style="flex:1;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;text-align:center">
+              <div style="font-weight:700; color: #6ee7b7">F1 Score</div>
+              <div id="f1" style="font-size:18px">-</div>
+            </div>
+          </div>
+          
+          <div style="margin-top:16px;text-align:center">
+             <button id="btnClear" class="btn ghost">Clear All</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="small">Model Config</div>
+          <div class="code" id="pycode">
+            <pre>
+# Model Configuration
+model_name = "distilbert-base-uncased"
+batch_size = 32
+learning_rate = 2e-5
+epochs = 2
+
+# Matplotlib Live Plot Logic
+import matplotlib.pyplot as plt
+
+def live_plot(x_data, y_data):
+    plt.plot(x_data, y_data)
+    plt.xlabel('Steps')
+    plt.ylabel('Accuracy')
+    plt.title('Training Accuracy')
+    plt.pause(0.01)
+
+# This UI simulates the logic above
+# using Chart.js for browser compatibility.
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="signature">
+      <p style="opacity:0.6; font-size:12px">Frontend Simulation • Chart.js Implementation</p>
+    </div>
+  </div>
+
+  <script>
+    // --- Elements ---
+    const consoleEl = document.getElementById('console');
+    const bar = document.getElementById('bar');
+    const accEl = document.getElementById('acc');
+    const f1El = document.getElementById('f1');
+    const ctx = document.getElementById('accChart').getContext('2d');
+
+    // --- Chart Configuration (Matplotlib Dark Style) ---
+    // Gradients for the fill
+    let gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(110, 231, 183, 0.4)'); // Accent color low opacity
+    gradient.addColorStop(1, 'rgba(110, 231, 183, 0.0)');
+
+    const chartConfig = {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Training Accuracy',
+          data: [],
+          borderColor: '#6ee7b7',
+          backgroundColor: gradient,
+          borderWidth: 2,
+          pointRadius: 0, // smooth line like tensorboard
+          pointHoverRadius: 4,
+          fill: true,
+          tension: 0.4 // smooth curves
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 }, // Disable internal animation for tight loop control
+        scales: {
+          x: {
+            display: false, // Hide x axis labels for cleaner look
+            grid: { display: false }
+          },
+          y: {
+            min: 0,
+            max: 1,
+            grid: { color: 'rgba(255,255,255,0.05)' },
+            ticks: { color: 'rgba(255,255,255,0.5)', font: {size: 10} }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: true }
+        }
+      }
+    };
+
+    const myChart = new Chart(ctx, chartConfig);
+
+    // --- Logger ---
+    function log(text){
+      const line = document.createElement('div');
+      line.textContent = `> ${text}`;
+      consoleEl.appendChild(line);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    // --- Simulation Engine ---
+    let animationId = null;
+
+    function simulateProgress(duration, onStep, onComplete){
+      let start = null;
+      cancelAnimationFrame(animationId); // Stop any previous runs
+      
+      function step(ts){
+        if(!start) start = ts;
+        const elapsed = ts - start;
+        const pct = Math.min(100, (elapsed/duration)*100);
+        
+        bar.style.width = pct + '%';
+        
+        if(onStep) onStep(pct, elapsed);
+        
+        if(elapsed < duration) {
+          animationId = requestAnimationFrame(step);
+        } else { 
+          if(onComplete) onComplete(); 
+        }
+      }
+      animationId = requestAnimationFrame(step);
+    }
+
+    // --- Event Listeners ---
+
+    document.getElementById('btnTokenize').addEventListener('click', ()=>{
+      log('Tokenization started...');
+      simulateProgress(1200, null, ()=>{ log('Tokenization complete. Vocab size: 30522'); });
+    });
+
+    document.getElementById('btnTrain').addEventListener('click', ()=>{
+      log('Initializing training loop...');
+      
+      // Reset Chart and Metrics
+      myChart.data.labels = [];
+      myChart.data.datasets[0].data = [];
+      myChart.update();
+      accEl.textContent = '0.00';
+      f1El.textContent = '0.00';
+      
+      let stepCount = 0;
+      
+      // Training Loop (5 seconds)
+      simulateProgress(5000, (pct, elapsed)=>{
+        
+        // Update Console occasionally
+        if(Math.floor(pct) % 20 === 0 && Math.floor(pct) !== 0) {
+           // log(`Epoch 1/2 - Step ${stepCount} - Loss: ${(0.9 - (pct/150)).toFixed(4)}`);
+        }
+
+        // --- MATH: Simulate Learning Curve ---
+        // Formula: Sigmoid-ish curve that grows from 0.1 to 0.9 with noise
+        stepCount++;
+        if(stepCount % 5 === 0) { // Update graph every 5 ticks for performance
+          const progress0to1 = pct / 100;
+          const baseAccuracy = 0.88 * (1 - Math.exp(-5 * progress0to1)); // Exponential decay inverse
+          const noise = (Math.random() - 0.5) * 0.05; // +/- 2.5% noise
+          let currentAcc = Math.max(0, Math.min(1, baseAccuracy + noise)); // Clamp 0-1
+          
+          // Push to Chart
+          myChart.data.labels.push(stepCount);
+          myChart.data.datasets[0].data.push(currentAcc);
+          myChart.update();
+
+          // Update Text
+          accEl.textContent = currentAcc.toFixed(2);
+          f1El.textContent = (currentAcc * 0.95).toFixed(2); // F1 usually correlates
+        }
+
+      }, ()=>{ 
+        log('Training finished.');
+        log('Best Accuracy: 0.87'); 
+        accEl.textContent = '0.87'; 
+        f1El.textContent = '0.86';
+      });
+    });
+
+    document.getElementById('btnEval').addEventListener('click', ()=>{
+      log('Evaluating on test set...');
+      accEl.textContent = '...';
+      simulateProgress(1500, null, ()=>{ 
+        log('Evaluation complete.'); 
+        accEl.textContent = '0.87';
+        f1El.textContent = '0.86';
+      });
+    });
+
+    document.getElementById('btnSave').addEventListener('click', ()=>{
+      log('Saving model...');
+      simulateProgress(900,null,()=>{ log('Saved to ./models/bert_imdb_v1.pt'); });
+    });
+
+    document.getElementById('btnPredict').addEventListener('click', ()=>{
+      const txt = document.getElementById('txtExample').value.trim();
+      const input = txt||'This movie was fantastic!';
+      log(`Input: "${input}"`);
+      simulateProgress(600,null,()=>{ 
+        const isPositive = Math.random() > 0.4; // slight bias to positive
+        const label = isPositive ? 'POSITIVE' : 'NEGATIVE'; 
+        const conf = (0.75 + Math.random()*0.24).toFixed(2); 
+        const color = isPositive ? '#6ee7b7' : '#f87171';
+        
+        const resLine = document.createElement('div');
+        resLine.innerHTML = `Result: <span style="color:${color};font-weight:bold">${label}</span> (${conf})`;
+        consoleEl.appendChild(resLine);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      });
+    });
+
+    document.getElementById('btnClear').addEventListener('click', ()=>{ 
+      consoleEl.textContent=''; 
+      bar.style.width='0%'; 
+      accEl.textContent='-'; 
+      f1El.textContent='-';
+      myChart.data.labels = [];
+      myChart.data.datasets[0].data = [];
+      myChart.update();
+    });
+  </script>
+</body>
+</html>

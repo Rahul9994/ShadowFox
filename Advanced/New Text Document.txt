@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DistilBERT IMDb Trainer — Rahul Penugonda</title>
+  <style>
+    :root{
+      --bg1:#0f172a;
+      --bg2:#071033;
+      --card:#0b1220;
+      --accent:#6ee7b7;
+      --glass:rgba(255,255,255,0.03);
+      --mono:SFMono-Regular, menlo, monospace;
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial,sans-serif;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#e6eef8}
+    .container{max-width:1100px;margin:40px auto;padding:28px;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:0 10px 30px rgba(2,6,23,0.6)}
+    header{display:flex;align-items:center;gap:16px}
+    .logo{width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#60a5fa);display:flex;align-items:center;justify-content:center;font-weight:700;color:#04263b}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:4px 0 18px;color:rgba(230,238,248,0.8)}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:20px}
+    .card{background:var(--card);padding:18px;border-radius:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.02)}
+    .controls{display:flex;gap:10px;flex-wrap:wrap}
+    button.btn{appearance:none;border:0;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer;transition:transform .15s ease,box-shadow .15s;display:inline-flex;align-items:center;gap:8px}
+    button.primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#04263b}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#cfe7ff}
+    button:active{transform:translateY(1px)}
+    .btn:hover{box-shadow:0 6px 20px rgba(10,20,40,0.5)}
+    .progress{height:12px;background:rgba(255,255,255,0.04);border-radius:999px;overflow:hidden}
+    .progress > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#60a5fa);border-radius:999px;transition:width 600ms cubic-bezier(.2,.9,.2,1)}
+    .console{height:250px;overflow:auto;background:linear-gradient(180deg,rgba(0,0,0,0.25),rgba(0,0,0,0.18));padding:12px;border-radius:8px;font-family:var(--mono);font-size:13px;color:#dbeafe}
+    .code{background:rgba(2,6,23,0.6);padding:16px;border-radius:10px;overflow:auto;font-family:var(--mono);font-size:13px;color:#cfe7ff;line-height:1.45}
+    pre{margin:0;white-space:pre-wrap}
+    .input-row{display:flex;gap:8px;margin-top:8px}
+    input[type=text]{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.02);color:inherit}
+    .small{font-size:12px;color:rgba(230,238,248,0.7)}
+    footer{margin-top:18px;display:flex;justify-content:space-between;align-items:center}
+    #timestamp{position:fixed;left:12px;bottom:8px;padding:6px 10px;border-radius:8px;background:var(--glass);font-size:12px}
+    .centered{display:flex;flex-direction:column;align-items:center;gap:6px}
+    .pulse{animation:pulse 2s infinite}
+    @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
+    @media (max-width:980px){.grid{grid-template-columns:1fr;}.container{margin:18px;padding:16px}}
+    .signature{margin-top:18px;text-align:center}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">DP</div>
+      <div>
+        <h1>DistilBERT IMDb Trainer — Interactive UI</h1>
+        <p class="lead">A beautiful HTML front-end that mirrors the original Python training script with simulated actions for demo and educational purposes.</p>
+      </div>
+    </header>
+    <div class="grid" style="margin-top:18px">
+      <div>
+        <div class="card">
+          <div class="controls">
+            <button id="btnTokenize" class="btn ghost">Tokenize</button>
+            <button id="btnTrain" class="btn primary">Start Training</button>
+            <button id="btnEval" class="btn ghost">Evaluate</button>
+            <button id="btnSave" class="btn ghost">Save Model</button>
+          </div>
+          <div style="margin-top:14px">
+            <div class="small">Progress</div>
+            <div class="progress" style="margin-top:8px"><i id="bar"></i></div>
+          </div>
+          <div style="margin-top:12px" class="small">Console</div>
+          <div id="console" class="console" style="margin-top:8px"></div>
+          <div class="input-row">
+            <input id="txtExample" type="text" placeholder="Enter a sentence to predict sentiment">
+            <button id="btnPredict" class="btn primary">Predict</button>
+          </div>
+          <div style="margin-top:10px" class="small">Examples: This movie was fantastic. | I want my money back.</div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="small">Python script (comments removed for concise display)</div>
+          <div class="code" id="pycode">
+            <pre>import torch
+import numpy as np
+from datasets import load_dataset
+from transformers import DistilBertTokenizer, DistilBertForSequenceClassification, Trainer, TrainingArguments
+from sklearn.metrics import accuracy_score, f1_score
+import os
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+torch.set_num_threads(2)
+
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    predictions = np.argmax(logits, axis=-1)
+    acc = accuracy_score(labels, predictions)
+    f1 = f1_score(labels, predictions)
+    return {"accuracy": acc, "f1": f1}
+
+def main():
+    print("--- 1. Loading and Preprocessing Data ---")
+    dataset = load_dataset("imdb")
+    train_dataset = dataset["train"].shuffle(seed=42).select(range(1000))
+    test_dataset = dataset["test"].shuffle(seed=42).select(range(250))
+    model_name = "distilbert-base-uncased"
+    tokenizer = DistilBertTokenizer.from_pretrained(model_name)
+    def tokenize_function(examples):
+        return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=128)
+    print("Tokenizing datasets...")
+    tokenized_train = train_dataset.map(tokenize_function, batched=True, batch_size=100, num_proc=1)
+    tokenized_test = test_dataset.map(tokenize_function, batched=True, batch_size=100, num_proc=1)
+    print("--- 2. Initializing Model ---")
+    model = DistilBertForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    print("--- 3. Setting up Training ---")
+    training_args = TrainingArguments(
+        output_dir="./results",
+        eval_strategy="epoch",
+        save_strategy="epoch",
+        learning_rate=2e-5,
+        per_device_train_batch_size=4,
+        per_device_eval_batch_size=4,
+        num_train_epochs=2,
+        weight_decay=0.01,
+        logging_dir='./logs',
+        logging_steps=50,
+        load_best_model_at_end=True,
+        dataloader_num_workers=0,
+        dataloader_pin_memory=False,
+        dataloader_drop_last=True,
+    )
+    trainer = Trainer(model=model, args=training_args, train_dataset=tokenized_train, eval_dataset=tokenized_test, compute_metrics=compute_metrics)
+    print("--- 4. Starting Training (Fine-Tuning) ---")
+    trainer.train()
+    print("--- 5. Final Evaluation ---")
+    results = trainer.evaluate()
+    print(f"Final Test Accuracy: {results['eval_accuracy']:.4f}")
+    print(f"Final Test F1 Score: {results['eval_f1']:.4f}")
+    model.save_pretrained("./my_sentiment_model")
+    tokenizer.save_pretrained("./my_sentiment_model")
+    print("Model saved to ./my_sentiment_model")
+    print("\n--- 6. Testing Custom Examples ---")
+    def predict_sentiment(text):
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        with torch.no_grad():
+            logits = model(**inputs).logits
+        predicted_class_id = logits.argmax().item()
+        label = "POSITIVE" if predicted_class_id == 1 else "NEGATIVE"
+        confidence = torch.softmax(logits, dim=1)[0][predicted_class_id].item()
+        return label, confidence
+    examples = [
+        "This movie was absolutely fantastic, I loved every second of it!",
+        "I want my money back. The plot was boring and the acting was stiff.",
+        "It was okay, not great but not terrible either."
+    ]
+    for text in examples:
+        label, score = predict_sentiment(text)
+        print(f"Review: '{text}'\nPrediction: {label} (Confidence: {score:.2f})\n")
+
+if __name__ == "__main__":
+    main()</pre>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card centered">
+          <div style="width:100%">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div style="font-weight:700">Status</div>
+                <div class="small">Ready</div>
+              </div>
+              <div style="text-align:right">
+                <div class="small">Device</div>
+                <div class="small">CPU mode</div>
+              </div>
+            </div>
+            <div style="margin-top:12px;width:100%">
+              <div class="small">Live Metrics</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <div style="flex:1;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;text-align:center">
+                  <div style="font-weight:700">Accuracy</div>
+                  <div id="acc">-</div>
+                </div>
+                <div style="flex:1;padding:12px;background:rgba(255,255,255,0.02);border-radius:8px;text-align:center">
+                  <div style="font-weight:700">F1</div>
+                  <div id="f1">-</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:16px;text-align:center">
+              <button id="btnClear" class="btn ghost">Clear Console</button>
+            </div>
+          </div>
+        </div>
+        <div class="signature">
+          <p align="center">Rahul Penugonda</p>
+          <p align="center">AV.SC.U4AIE24151</p>
+          <p align="center">Experiment performed on: </p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="timestamp"></div>
+  <script>
+    const consoleEl = document.getElementById('console');
+    const bar = document.getElementById('bar');
+    const accEl = document.getElementById('acc');
+    const f1El = document.getElementById('f1');
+
+    function log(text){
+      const line = document.createElement('div');
+      line.textContent = text;
+      consoleEl.appendChild(line);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function simulateProgress(duration, onStep, onComplete){
+      let start = null;
+      function step(ts){
+        if(!start) start = ts;
+        const elapsed = ts - start;
+        const pct = Math.min(100, Math.round((elapsed/duration)*100));
+        bar.style.width = pct + '%';
+        if(onStep) onStep(pct);
+        if(elapsed < duration) requestAnimationFrame(step);
+        else{ if(onComplete) onComplete(); }
+      }
+      requestAnimationFrame(step);
+    }
+
+    document.getElementById('btnTokenize').addEventListener('click', ()=>{
+      log('Tokenization started...');
+      simulateProgress(1200, (p)=>{}, ()=>{ log('Tokenization complete.'); });
+    });
+
+    document.getElementById('btnTrain').addEventListener('click', ()=>{
+      log('Initializing training loop...');
+      simulateProgress(5000, (p)=>{ if(p%10===0) log('Training progress: '+p+'%'); }, ()=>{ log('Training finished. Best model loaded.'); accEl.textContent = '0.87'; f1El.textContent = '0.86'; });
+    });
+
+    document.getElementById('btnEval').addEventListener('click', ()=>{
+      log('Evaluating on test set...');
+      simulateProgress(1800, null, ()=>{ log('Evaluation complete. Final Test Accuracy: 0.87'); log('Final Test F1 Score: 0.86'); });
+    });
+
+    document.getElementById('btnSave').addEventListener('click', ()=>{
+      log('Saving model to ./my_sentiment_model');
+      simulateProgress(900,null,()=>{ log('Model saved to ./my_sentiment_model'); });
+    });
+
+    document.getElementById('btnPredict').addEventListener('click', ()=>{
+      const txt = document.getElementById('txtExample').value.trim();
+      const input = txt||'This movie was absolutely fantastic, I loved every second of it!';
+      log('Preparing input: '+input);
+      simulateProgress(800,null,()=>{ const flip = Math.random()>0.3; const label = flip? 'POSITIVE' : 'NEGATIVE'; const conf = (0.7 + Math.random()*0.29).toFixed(2); log(`Prediction: ${label} (Confidence: ${conf})`); });
+    });
+
+    document.getElementById('btnClear').addEventListener('click', ()=>{ consoleEl.textContent=''; bar.style.width='0%'; accEl.textContent='-'; f1El.textContent='-'; });
+
+    const now = new Date();
+    const ts = now.toLocaleString('en-GB', {year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('timestamp').textContent = ts;
+  </script>
+</body>
+</html>
